@@ -2,6 +2,11 @@
 
 Easy Recall Bot is a Telegram bot for vocabulary practice with onboarding, spaced review, quiz mode, and reminders.
 
+## Public Links
+
+- Telegram bot: [@EasyRecallBot](https://t.me/EasyRecallBot)
+- Landing page: [smith3v.com/easy-recall-bot](https://www.smith3v.com/easy-recall-bot)
+
 ## Highlights
 
 - Onboarding wizard on `/start` to initialize a personal deck from built-in multilingual vocabulary.
