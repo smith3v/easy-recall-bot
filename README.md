@@ -43,7 +43,7 @@ If built-in onboarding vocabulary is unavailable, users can still upload their o
 
 ### Prerequisites
 
-- Go 1.26+
+- Go 1.26.2+
 - PostgreSQL
 - Telegram bot token from [BotFather](https://core.telegram.org/bots#botfather)
 
