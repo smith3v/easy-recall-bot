@@ -3,7 +3,9 @@ package reminders
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/go-telegram/bot"
@@ -97,6 +99,9 @@ func handleUserReminder(ctx context.Context, b *bot.Bot, user db.UserSettings, n
 	if sessionSize > 0 && (overdueCount > sessionSize || (capacity > 0 && overdueCount > capacity)) {
 		sent, err := sendOverdueSession(ctx, b, user, now)
 		if err != nil {
+			if handleBlockedReminderSend(user, err) {
+				return
+			}
 			logger.Error("failed to send overdue session", "user_id", user.UserID, "error", err)
 			return
 		}
@@ -112,6 +117,9 @@ func handleUserReminder(ctx context.Context, b *bot.Bot, user db.UserSettings, n
 
 	sent, err := sendTrainingSession(ctx, b, user, now)
 	if err != nil {
+		if handleBlockedReminderSend(user, err) {
+			return
+		}
 		logger.Error("failed to send training session", "user_id", user.UserID, "error", err)
 		return
 	}
@@ -257,6 +265,34 @@ func computeMissedCount(user db.UserSettings) int {
 		return missed + 1
 	}
 	return 0
+}
+
+func handleBlockedReminderSend(user db.UserSettings, err error) bool {
+	if !isBotBlockedError(err) {
+		return false
+	}
+
+	if !user.TrainingPaused {
+		if saveErr := db.DB.Model(&db.UserSettings{}).
+			Where("user_id = ?", user.UserID).
+			Update("training_paused", true).Error; saveErr != nil {
+			logger.Error("failed to pause reminders after bot block", "user_id", user.UserID, "error", saveErr)
+			return true
+		}
+	}
+
+	logger.Info("paused reminders because bot was blocked", "user_id", user.UserID)
+	return true
+}
+
+func isBotBlockedError(err error) bool {
+	if err == nil {
+		return false
+	}
+	if !errors.Is(err, bot.ErrorForbidden) {
+		return false
+	}
+	return strings.Contains(strings.ToLower(err.Error()), "bot was blocked by the user")
 }
 
 func countEnabledSlots(user db.UserSettings) int {
