@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/smith3v/tg-word-reminder/pkg/bot/training"
 	"github.com/smith3v/tg-word-reminder/pkg/db"
 	"github.com/smith3v/tg-word-reminder/pkg/logger"
+	"gorm.io/gorm"
 )
 
 func HandleOverdueCallback(ctx context.Context, b *bot.Bot, update *models.Update) {
@@ -126,12 +128,12 @@ func snoozeReminders(userID int64, snoozedUntil time.Time) error {
 	if result.RowsAffected > 0 {
 		return nil
 	}
-
-	settings := db.UserSettings{
-		UserID:               userID,
-		ReminderSnoozedUntil: &snoozedUntil,
+	var settings db.UserSettings
+	err := db.DB.Select("user_id").Where("user_id = ?", userID).First(&settings).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return err
 	}
-	return db.DB.Create(&settings).Error
+	return err
 }
 
 func startCatchUp(ctx context.Context, b *bot.Bot, userID int64, now time.Time) error {

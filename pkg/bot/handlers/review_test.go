@@ -3,6 +3,7 @@ package handlers
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -14,6 +15,7 @@ import (
 	"github.com/smith3v/tg-word-reminder/pkg/internal/testutil"
 	"github.com/smith3v/tg-word-reminder/pkg/logger"
 	"gorm.io/datatypes"
+	"gorm.io/gorm"
 )
 
 func TestHandleReviewNoPairs(t *testing.T) {
@@ -425,6 +427,53 @@ func TestHandleOverdueCallbackSnoozeWeekSetsReminderWindow(t *testing.T) {
 	}
 	if !reloaded.SrsDueAt.Equal(originalDue) {
 		t.Fatalf("expected word pair due time to stay unchanged, got %v want %v", reloaded.SrsDueAt, originalDue)
+	}
+}
+
+func TestHandleOverdueCallbackSnoozeWithoutSettingsLogsOnly(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   4004,
+		Word1:    "ciao",
+		Word2:    "hello",
+		SrsState: "review",
+		SrsDueAt: time.Now().Add(-time.Minute).UTC(),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	session := training.DefaultManager.StartOrRestart(4004, 4004, []db.WordPair{
+		{UserID: 4004, Word1: "ciao", Word2: "hello", SrsState: "review"},
+	})
+	training.DefaultManager.SetCurrentMessageID(session, 24)
+
+	client := newMockClient()
+	b := newTestTelegramBot(t, client)
+
+	token := training.DefaultOverdue.Start(4004, 4004)
+	training.DefaultOverdue.BindMessage(4004, 4004, token, 24)
+	update := newTestCallbackUpdate("t:overdue:"+token+":snooze1d", 4004, 4004, 24)
+
+	HandleOverdueCallback(context.Background(), b, update)
+
+	if got := training.DefaultManager.GetSession(4004, 4004); got == nil {
+		t.Fatalf("expected session to remain active on snooze failure")
+	}
+
+	var settings db.UserSettings
+	err := db.DB.Where("user_id = ?", 4004).First(&settings).Error
+	if !errors.Is(err, gorm.ErrRecordNotFound) {
+		t.Fatalf("expected no user settings row to be created, got err=%v settings=%+v", err, settings)
+	}
+
+	for _, req := range client.requests {
+		if strings.Contains(req.path, "editMessageText") {
+			t.Fatalf("did not expect overdue prompt edit on snooze failure")
+		}
 	}
 }
 
