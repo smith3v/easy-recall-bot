@@ -52,6 +52,9 @@ func handleUserReminder(ctx context.Context, b *bot.Bot, user db.UserSettings, n
 	if user.TrainingPaused {
 		return
 	}
+	if user.ReminderSnoozedUntil != nil && now.Before(*user.ReminderSnoozedUntil) {
+		return
+	}
 	_, ok := latestDueSlot(now, user)
 	if !ok {
 		return

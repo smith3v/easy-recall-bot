@@ -487,3 +487,120 @@ func TestReminderSkipsRecentActiveSession(t *testing.T) {
 		}
 	}
 }
+
+func TestReminderSkipsOverduePromptWhileSnoozed(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	snoozedUntil := now.Add(6 * 24 * time.Hour)
+	user := db.UserSettings{
+		UserID:                50,
+		PairsToSend:           1,
+		ReminderAfternoon:     true,
+		TimezoneOffsetHours:   0,
+		ReminderSnoozedUntil:  &snoozedUntil,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&[]db.WordPair{
+		{UserID: 50, Word1: "a", Word2: "b", SrsState: "review", SrsDueAt: now.Add(-time.Hour)},
+		{UserID: 50, Word1: "c", Word2: "d", SrsState: "review", SrsDueAt: now.Add(-2 * time.Hour)},
+	}).Error; err != nil {
+		t.Fatalf("failed to seed pairs: %v", err)
+	}
+
+	client := newMockClient()
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	for _, req := range client.requests {
+		if strings.Contains(req.path, "editMessageText") || strings.Contains(req.path, "sendMessage") {
+			t.Fatalf("expected no reminder actions while snoozed, got %s", req.path)
+		}
+	}
+}
+
+func TestReminderSkipsNormalSessionWhileSnoozed(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	snoozedUntil := now.Add(24 * time.Hour)
+	user := db.UserSettings{
+		UserID:                60,
+		PairsToSend:           1,
+		ReminderAfternoon:     true,
+		TimezoneOffsetHours:   0,
+		ReminderSnoozedUntil:  &snoozedUntil,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   60,
+		Word1:    "alpha",
+		Word2:    "beta",
+		SrsState: "review",
+		SrsDueAt: now.Add(-30 * time.Minute),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	client := newMockClient()
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	for _, req := range client.requests {
+		if strings.Contains(req.path, "editMessageText") || strings.Contains(req.path, "sendMessage") {
+			t.Fatalf("expected no reminder actions while snoozed, got %s", req.path)
+		}
+	}
+}
+
+func TestReminderResumesAfterSnoozeExpires(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	snoozedUntil := now.Add(-time.Minute)
+	user := db.UserSettings{
+		UserID:                70,
+		PairsToSend:           1,
+		ReminderAfternoon:     true,
+		TimezoneOffsetHours:   0,
+		ReminderSnoozedUntil:  &snoozedUntil,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   70,
+		Word1:    "hola",
+		Word2:    "hello",
+		SrsState: "review",
+		SrsDueAt: now.Add(-15 * time.Minute),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	client := newMockClient()
+	client.response = `{"ok":true,"result":{"message_id":88}}`
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	got := client.lastMessageText(t)
+	if !strings.Contains(got, "||") {
+		t.Fatalf("expected reminder prompt after snooze expiry, got %q", got)
+	}
+}
