@@ -45,6 +45,7 @@ type UserSettings struct {
 	TimezoneOffsetHours    int   `gorm:"not null;default:0"`
 	MissedTrainingSessions int   `gorm:"not null;default:0"`
 	TrainingPaused         bool  `gorm:"not null;default:false"`
+	ReminderSnoozedUntil   *time.Time
 	LastTrainingSentAt     *time.Time
 	LastTrainingEngagedAt  *time.Time
 }

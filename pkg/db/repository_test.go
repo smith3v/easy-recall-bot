@@ -70,3 +70,17 @@ func TestMigrateSessionTables(t *testing.T) {
 		t.Fatalf("expected game_sessions table to exist")
 	}
 }
+
+func TestMigrateUserSettingsSnoozeColumn(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open sqlite database: %v", err)
+	}
+	if err := gdb.AutoMigrate(&WordPair{}, &InitVocabulary{}, &UserSettings{}, &OnboardingState{}, &GameSessionStatistics{}, &TrainingSession{}, &GameSession{}); err != nil {
+		t.Fatalf("failed to migrate schema: %v", err)
+	}
+
+	if !gdb.Migrator().HasColumn(&UserSettings{}, "reminder_snoozed_until") {
+		t.Fatalf("expected reminder_snoozed_until column to exist")
+	}
+}
