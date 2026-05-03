@@ -39,6 +39,11 @@ func newMockClient() *mockClient {
 	}
 }
 
+func (m *mockClient) withResponse(response string) *mockClient {
+	m.response = response
+	return m
+}
+
 func (m *mockClient) Do(req *http.Request) (*http.Response, error) {
 	body, err := io.ReadAll(req.Body)
 	if err != nil {
@@ -497,11 +502,11 @@ func TestReminderSkipsOverduePromptWhileSnoozed(t *testing.T) {
 	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
 	snoozedUntil := now.Add(6 * 24 * time.Hour)
 	user := db.UserSettings{
-		UserID:                50,
-		PairsToSend:           1,
-		ReminderAfternoon:     true,
-		TimezoneOffsetHours:   0,
-		ReminderSnoozedUntil:  &snoozedUntil,
+		UserID:               50,
+		PairsToSend:          1,
+		ReminderAfternoon:    true,
+		TimezoneOffsetHours:  0,
+		ReminderSnoozedUntil: &snoozedUntil,
 	}
 	if err := db.DB.Create(&user).Error; err != nil {
 		t.Fatalf("failed to seed user settings: %v", err)
@@ -534,11 +539,11 @@ func TestReminderSkipsNormalSessionWhileSnoozed(t *testing.T) {
 	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
 	snoozedUntil := now.Add(24 * time.Hour)
 	user := db.UserSettings{
-		UserID:                60,
-		PairsToSend:           1,
-		ReminderAfternoon:     true,
-		TimezoneOffsetHours:   0,
-		ReminderSnoozedUntil:  &snoozedUntil,
+		UserID:               60,
+		PairsToSend:          1,
+		ReminderAfternoon:    true,
+		TimezoneOffsetHours:  0,
+		ReminderSnoozedUntil: &snoozedUntil,
 	}
 	if err := db.DB.Create(&user).Error; err != nil {
 		t.Fatalf("failed to seed user settings: %v", err)
@@ -574,11 +579,11 @@ func TestReminderResumesAfterSnoozeExpires(t *testing.T) {
 	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
 	snoozedUntil := now.Add(-time.Minute)
 	user := db.UserSettings{
-		UserID:                70,
-		PairsToSend:           1,
-		ReminderAfternoon:     true,
-		TimezoneOffsetHours:   0,
-		ReminderSnoozedUntil:  &snoozedUntil,
+		UserID:               70,
+		PairsToSend:          1,
+		ReminderAfternoon:    true,
+		TimezoneOffsetHours:  0,
+		ReminderSnoozedUntil: &snoozedUntil,
 	}
 	if err := db.DB.Create(&user).Error; err != nil {
 		t.Fatalf("failed to seed user settings: %v", err)
@@ -602,5 +607,132 @@ func TestReminderResumesAfterSnoozeExpires(t *testing.T) {
 	got := client.lastMessageText(t)
 	if !strings.Contains(got, "||") {
 		t.Fatalf("expected reminder prompt after snooze expiry, got %q", got)
+	}
+}
+
+func TestReminderPausesWhenBotIsBlocked(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	lastSent := time.Date(2025, 1, 2, 12, 0, 0, 0, time.UTC)
+	user := db.UserSettings{
+		UserID:                 80,
+		PairsToSend:            1,
+		ReminderAfternoon:      true,
+		TimezoneOffsetHours:    0,
+		MissedTrainingSessions: 4,
+		LastTrainingSentAt:     &lastSent,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   80,
+		Word1:    "uno",
+		Word2:    "one",
+		SrsState: "review",
+		SrsDueAt: now.Add(-time.Hour),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	client := newMockClient().withResponse(`{"ok":false,"description":"Forbidden: bot was blocked by the user","error_code":403}`)
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	var updated db.UserSettings
+	if err := db.DB.Where("user_id = ?", user.UserID).First(&updated).Error; err != nil {
+		t.Fatalf("failed to load updated user settings: %v", err)
+	}
+	if !updated.TrainingPaused {
+		t.Fatalf("expected reminders to pause when bot is blocked")
+	}
+	if updated.MissedTrainingSessions != 4 {
+		t.Fatalf("expected blocked pause to preserve missed count, got %d", updated.MissedTrainingSessions)
+	}
+}
+
+func TestReminderSkipAfterBlockedPause(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	user := db.UserSettings{
+		UserID:              81,
+		PairsToSend:         1,
+		ReminderAfternoon:   true,
+		TimezoneOffsetHours: 0,
+		TrainingPaused:      true,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   81,
+		Word1:    "dos",
+		Word2:    "two",
+		SrsState: "review",
+		SrsDueAt: now.Add(-time.Hour),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	client := newMockClient()
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	if len(client.requests) != 0 {
+		t.Fatalf("expected paused user to receive no reminder requests, got %d", len(client.requests))
+	}
+}
+
+func TestOverdueReminderPausesWhenBotIsBlocked(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	now := time.Date(2025, 1, 2, 13, 30, 0, 0, time.UTC)
+	user := db.UserSettings{
+		UserID:              82,
+		PairsToSend:         1,
+		ReminderAfternoon:   true,
+		TimezoneOffsetHours: 0,
+	}
+	if err := db.DB.Create(&user).Error; err != nil {
+		t.Fatalf("failed to seed user settings: %v", err)
+	}
+	if err := db.DB.Create(&[]db.WordPair{
+		{UserID: 82, Word1: "a", Word2: "b", SrsState: "review", SrsDueAt: now.Add(-time.Hour)},
+		{UserID: 82, Word1: "c", Word2: "d", SrsState: "review", SrsDueAt: now.Add(-2 * time.Hour)},
+	}).Error; err != nil {
+		t.Fatalf("failed to seed pairs: %v", err)
+	}
+
+	client := newMockClient().withResponse(`{"ok":false,"description":"Forbidden: bot was blocked by the user","error_code":403}`)
+	b := newTestTelegramBot(t, client)
+
+	handleUserReminder(context.Background(), b, user, now)
+
+	var updated db.UserSettings
+	if err := db.DB.Where("user_id = ?", user.UserID).First(&updated).Error; err != nil {
+		t.Fatalf("failed to load updated user settings: %v", err)
+	}
+	if !updated.TrainingPaused {
+		t.Fatalf("expected overdue reminders to pause when bot is blocked")
+	}
+}
+
+func TestBlockedDetectionIgnoresOtherForbiddenErrors(t *testing.T) {
+	err := fmt.Errorf("%w, Forbidden: user is deactivated", telegram.ErrorForbidden)
+	if isBotBlockedError(err) {
+		t.Fatalf("expected non-block forbidden error to be ignored")
 	}
 }
