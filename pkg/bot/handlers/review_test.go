@@ -306,19 +306,21 @@ func TestHandleOverdueCallbackSnoozeEndsSession(t *testing.T) {
 	training.ResetDefaultManager(time.Now)
 	training.ResetOverdueManager(time.Now)
 
+	originalDue := time.Now().Add(-time.Minute).UTC()
 	if err := db.DB.Create(&db.UserSettings{
 		UserID:      4002,
 		PairsToSend: 1,
 	}).Error; err != nil {
 		t.Fatalf("failed to seed settings: %v", err)
 	}
-	if err := db.DB.Create(&db.WordPair{
+	pair := db.WordPair{
 		UserID:   4002,
 		Word1:    "hola",
 		Word2:    "adios",
 		SrsState: "new",
-		SrsDueAt: time.Now().Add(-time.Minute),
-	}).Error; err != nil {
+		SrsDueAt: originalDue,
+	}
+	if err := db.DB.Create(&pair).Error; err != nil {
 		t.Fatalf("failed to seed word pair: %v", err)
 	}
 
@@ -334,10 +336,95 @@ func TestHandleOverdueCallbackSnoozeEndsSession(t *testing.T) {
 	training.DefaultOverdue.BindMessage(4002, 4002, token, 22)
 	update := newTestCallbackUpdate("t:overdue:"+token+":snooze1d", 4002, 4002, 22)
 
+	before := time.Now().UTC()
 	HandleOverdueCallback(context.Background(), b, update)
+	after := time.Now().UTC()
 
 	if session := training.DefaultManager.GetSession(4002, 4002); session != nil {
 		t.Fatalf("expected session to end after snooze")
+	}
+
+	var settings db.UserSettings
+	if err := db.DB.Where("user_id = ?", 4002).First(&settings).Error; err != nil {
+		t.Fatalf("failed to reload settings: %v", err)
+	}
+	if settings.ReminderSnoozedUntil == nil {
+		t.Fatalf("expected reminder snooze to be set")
+	}
+	if settings.ReminderSnoozedUntil.Before(before.Add(24 * time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(24*time.Hour)) {
+		t.Fatalf("expected snooze to be about 24h ahead, got %v", settings.ReminderSnoozedUntil)
+	}
+
+	var reloaded db.WordPair
+	if err := db.DB.First(&reloaded, pair.ID).Error; err != nil {
+		t.Fatalf("failed to reload word pair: %v", err)
+	}
+	if !reloaded.SrsDueAt.Equal(originalDue) {
+		t.Fatalf("expected word pair due time to stay unchanged, got %v want %v", reloaded.SrsDueAt, originalDue)
+	}
+}
+
+func TestHandleOverdueCallbackSnoozeWeekSetsReminderWindow(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	training.ResetDefaultManager(time.Now)
+	training.ResetOverdueManager(time.Now)
+
+	originalDue := time.Now().Add(-2 * time.Minute).UTC()
+	if err := db.DB.Create(&db.UserSettings{
+		UserID:      4003,
+		PairsToSend: 1,
+	}).Error; err != nil {
+		t.Fatalf("failed to seed settings: %v", err)
+	}
+	pair := db.WordPair{
+		UserID:   4003,
+		Word1:    "bonjour",
+		Word2:    "hello",
+		SrsState: "review",
+		SrsDueAt: originalDue,
+	}
+	if err := db.DB.Create(&pair).Error; err != nil {
+		t.Fatalf("failed to seed word pair: %v", err)
+	}
+
+	session := training.DefaultManager.StartOrRestart(4003, 4003, []db.WordPair{
+		{UserID: 4003, Word1: "bonjour", Word2: "hello", SrsState: "review"},
+	})
+	training.DefaultManager.SetCurrentMessageID(session, 23)
+
+	client := newMockClient()
+	b := newTestTelegramBot(t, client)
+
+	token := training.DefaultOverdue.Start(4003, 4003)
+	training.DefaultOverdue.BindMessage(4003, 4003, token, 23)
+	update := newTestCallbackUpdate("t:overdue:"+token+":snooze1w", 4003, 4003, 23)
+
+	before := time.Now().UTC()
+	HandleOverdueCallback(context.Background(), b, update)
+	after := time.Now().UTC()
+
+	if session := training.DefaultManager.GetSession(4003, 4003); session != nil {
+		t.Fatalf("expected session to end after snooze")
+	}
+
+	var settings db.UserSettings
+	if err := db.DB.Where("user_id = ?", 4003).First(&settings).Error; err != nil {
+		t.Fatalf("failed to reload settings: %v", err)
+	}
+	if settings.ReminderSnoozedUntil == nil {
+		t.Fatalf("expected reminder snooze to be set")
+	}
+	if settings.ReminderSnoozedUntil.Before(before.Add(7 * 24 * time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(7*24*time.Hour)) {
+		t.Fatalf("expected snooze to be about 7d ahead, got %v", settings.ReminderSnoozedUntil)
+	}
+
+	var reloaded db.WordPair
+	if err := db.DB.First(&reloaded, pair.ID).Error; err != nil {
+		t.Fatalf("failed to reload word pair: %v", err)
+	}
+	if !reloaded.SrsDueAt.Equal(originalDue) {
+		t.Fatalf("expected word pair due time to stay unchanged, got %v want %v", reloaded.SrsDueAt, originalDue)
 	}
 }
 

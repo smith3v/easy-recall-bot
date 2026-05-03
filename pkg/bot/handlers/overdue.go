@@ -63,21 +63,21 @@ func HandleOverdueCallback(ctx context.Context, b *bot.Bot, update *models.Updat
 		}
 		responseText = "Let's catch up right away."
 	case "snooze1d":
-		if err := snoozeOverdue(update.CallbackQuery.From.ID, now.Add(24*time.Hour), now); err != nil {
+		if err := snoozeReminders(update.CallbackQuery.From.ID, now.Add(24*time.Hour)); err != nil {
 			logger.Error("failed to snooze overdue", "user_id", update.CallbackQuery.From.ID, "error", err)
 			answerCallback("Failed to snooze")
 			return
 		}
 		training.DefaultManager.End(msg.Chat.ID, update.CallbackQuery.From.ID)
-		responseText = "Snoozed catch up for 1 day."
+		responseText = "Snoozed reminders for 1 day."
 	case "snooze1w":
-		if err := snoozeOverdue(update.CallbackQuery.From.ID, now.Add(7*24*time.Hour), now); err != nil {
+		if err := snoozeReminders(update.CallbackQuery.From.ID, now.Add(7*24*time.Hour)); err != nil {
 			logger.Error("failed to snooze overdue", "user_id", update.CallbackQuery.From.ID, "error", err)
 			answerCallback("Failed to snooze")
 			return
 		}
 		training.DefaultManager.End(msg.Chat.ID, update.CallbackQuery.From.ID)
-		responseText = "Snoozed catch up for a week."
+		responseText = "Snoozed reminders for 1 week."
 	default:
 		answerCallback("Not active")
 		return
@@ -116,10 +116,22 @@ func parseOverdueCallback(data string) (string, string) {
 	}
 }
 
-func snoozeOverdue(userID int64, nextDue time.Time, now time.Time) error {
-	return db.DB.Model(&db.WordPair{}).
-		Where("user_id = ? AND srs_due_at <= ?", userID, now).
-		Update("srs_due_at", nextDue).Error
+func snoozeReminders(userID int64, snoozedUntil time.Time) error {
+	result := db.DB.Model(&db.UserSettings{}).
+		Where("user_id = ?", userID).
+		Update("reminder_snoozed_until", snoozedUntil)
+	if result.Error != nil {
+		return result.Error
+	}
+	if result.RowsAffected > 0 {
+		return nil
+	}
+
+	settings := db.UserSettings{
+		UserID:               userID,
+		ReminderSnoozedUntil: &snoozedUntil,
+	}
+	return db.DB.Create(&settings).Error
 }
 
 func startCatchUp(ctx context.Context, b *bot.Bot, userID int64, now time.Time) error {
