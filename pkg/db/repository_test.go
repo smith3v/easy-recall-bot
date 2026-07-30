@@ -84,3 +84,17 @@ func TestMigrateUserSettingsSnoozeColumn(t *testing.T) {
 		t.Fatalf("expected reminder_snoozed_until column to exist")
 	}
 }
+
+func TestMigrateOnboardingResetPendingColumn(t *testing.T) {
+	gdb, err := gorm.Open(sqlite.Open("file::memory:?cache=shared"), &gorm.Config{})
+	if err != nil {
+		t.Fatalf("failed to open sqlite database: %v", err)
+	}
+	if err := gdb.AutoMigrate(&OnboardingState{}); err != nil {
+		t.Fatalf("failed to migrate onboarding state: %v", err)
+	}
+
+	if !gdb.Migrator().HasColumn(&OnboardingState{}, "reset_pending") {
+		t.Fatalf("expected reset_pending column to exist")
+	}
+}

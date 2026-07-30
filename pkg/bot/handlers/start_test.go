@@ -90,6 +90,9 @@ func TestHandleStartRequestsResetPhraseForExistingUser(t *testing.T) {
 	if !state.AwaitingResetPhrase {
 		t.Fatalf("expected awaiting reset phrase, got %+v", state)
 	}
+	if state.ResetPending {
+		t.Fatalf("did not expect reset to be pending before phrase confirmation")
+	}
 
 	var settings db.UserSettings
 	if err := db.DB.Where("user_id = ?", 203).First(&settings).Error; err != nil {

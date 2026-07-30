@@ -131,7 +131,7 @@ func HandleOnboardingCallback(ctx context.Context, b *bot.Bot, update *models.Up
 		}
 		answerCallback("")
 	case onboarding.ActionBackLearning:
-		if _, err := onboarding.Begin(userID); err != nil {
+		if _, err := onboarding.BackToLearning(userID); err != nil {
 			logger.Error("failed to reset onboarding state to learning", "user_id", userID, "error", err)
 			answerCallback("Failed")
 			return
@@ -250,20 +250,25 @@ func tryHandleOnboardingResetPhrase(ctx context.Context, b *bot.Bot, update *mod
 		return true
 	}
 
-	if err := onboarding.ResetUserDataTx(update.Message.From.ID); err != nil {
-		logger.Error("failed to reset user data", "user_id", update.Message.From.ID, "error", err)
+	if _, err := onboarding.BeginReset(update.Message.From.ID); err != nil {
+		logger.Error("failed to start reset onboarding", "user_id", update.Message.From.ID, "error", err)
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "Failed to reset your data. Please try again later.",
+			Text:   "Failed to start onboarding. Your existing data is unchanged.",
 		})
 		return true
 	}
 
-	if err := sendOnboardingLearningPrompt(ctx, b, update.Message.Chat.ID, update.Message.From.ID); err != nil {
+	text, keyboard := onboarding.RenderLearningLanguagePrompt()
+	if _, err := b.SendMessage(ctx, &bot.SendMessageParams{
+		ChatID:      update.Message.Chat.ID,
+		Text:        text,
+		ReplyMarkup: keyboard,
+	}); err != nil {
 		logger.Error("failed to restart onboarding after reset", "user_id", update.Message.From.ID, "error", err)
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "Data reset completed, but onboarding failed to start. Send /start to retry.",
+			Text:   "Failed to show onboarding. Your existing data is unchanged; send /start to retry.",
 		})
 	}
 	return true

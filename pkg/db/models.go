@@ -57,6 +57,7 @@ type OnboardingState struct {
 	LearningLang        string `gorm:"not null;default:''"`
 	KnownLang           string `gorm:"not null;default:''"`
 	AwaitingResetPhrase bool   `gorm:"not null;default:false"`
+	ResetPending        bool   `gorm:"not null;default:false"`
 	CreatedAt           time.Time
 	UpdatedAt           time.Time
 }
