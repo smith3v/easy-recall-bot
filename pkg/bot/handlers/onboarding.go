@@ -7,7 +7,9 @@ import (
 
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
+	"github.com/smith3v/tg-word-reminder/pkg/bot/game"
 	"github.com/smith3v/tg-word-reminder/pkg/bot/onboarding"
+	"github.com/smith3v/tg-word-reminder/pkg/bot/training"
 	"github.com/smith3v/tg-word-reminder/pkg/logger"
 )
 
@@ -174,6 +176,11 @@ func HandleOnboardingCallback(ctx context.Context, b *bot.Bot, update *models.Up
 			logger.Error("failed to provision onboarding vocabulary", "user_id", userID, "error", err)
 			answerCallback("Failed")
 			return
+		}
+
+		if state.ResetPending {
+			training.DefaultManager.EndAllForUser(userID)
+			game.DefaultManager.EndAllForUser(userID, "reset")
 		}
 
 		if err := editOnboardingMessage(ctx, b, msg.Chat.ID, msg.ID, "Onboarding completed ✅", &models.InlineKeyboardMarkup{InlineKeyboard: [][]models.InlineKeyboardButton{}}); err != nil {

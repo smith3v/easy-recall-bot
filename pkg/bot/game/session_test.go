@@ -404,6 +404,48 @@ func TestCollectInactiveRemovesExpiredSessions(t *testing.T) {
 	}
 }
 
+func TestEndAllForUserRemovesOnlyMatchingSessionsAndClosesStatistics(t *testing.T) {
+	testutil.SetupTestDB(t)
+
+	clock := &testClock{t: time.Date(2024, 2, 1, 10, 0, 0, 0, time.UTC)}
+	manager := NewGameManager(clock.Now)
+	target := manager.StartOrRestart(11, 21, []db.WordPair{
+		{ID: 1, UserID: 21, Word1: "hola", Word2: "hello"},
+	})
+	other := manager.StartOrRestart(12, 22, []db.WordPair{
+		{ID: 2, UserID: 22, Word1: "adios", Word2: "goodbye"},
+	})
+
+	clock.Advance(5 * time.Minute)
+	manager.EndAllForUser(21, "reset")
+
+	if manager.GetSession(11, 21) != nil {
+		t.Fatalf("expected target user's session to be removed")
+	}
+	if manager.GetSession(12, 22) != other {
+		t.Fatalf("expected other user's session to remain")
+	}
+
+	targetStats := fetchGameSession(t, target.sessionID)
+	if targetStats.EndedAt == nil || targetStats.EndedReason == nil || targetStats.DurationSeconds == nil {
+		t.Fatalf("expected target session statistics to be closed")
+	}
+	if targetStats.EndedAt.UTC() != clock.t {
+		t.Fatalf("expected ended_at %v, got %v", clock.t, targetStats.EndedAt.UTC())
+	}
+	if *targetStats.EndedReason != "reset" {
+		t.Fatalf("expected ended_reason reset, got %q", *targetStats.EndedReason)
+	}
+	if *targetStats.DurationSeconds != int((5 * time.Minute).Seconds()) {
+		t.Fatalf("expected duration_seconds %d, got %d", int((5 * time.Minute).Seconds()), *targetStats.DurationSeconds)
+	}
+
+	otherStats := fetchGameSession(t, other.sessionID)
+	if otherStats.EndedAt != nil || otherStats.EndedReason != nil || otherStats.DurationSeconds != nil {
+		t.Fatalf("expected other user's statistics to remain open")
+	}
+}
+
 func TestSweepInactiveSendsStats(t *testing.T) {
 	clock := &testClock{t: time.Date(2024, 2, 1, 11, 0, 0, 0, time.UTC)}
 	manager := NewGameManager(clock.Now)
