@@ -15,7 +15,11 @@ import (
 	"github.com/smith3v/tg-word-reminder/pkg/config"
 )
 
-const invitationMessage = `We've improved the bot with guided setup and a much larger starter vocabulary. If you'd like a clean start, send /start and follow the reset prompts. Your current cards will remain unchanged unless you finish setup and tap Initialize.`
+const invitationMessage = `👋 Hi! We've improved the bot with guided setup and a much larger starter vocabulary 📚
+
+If you'd like a fresh start, send /start and follow the reset prompts ✨
+
+🔒 Your current cards will remain unchanged unless you finish setup and tap Initialize.`
 
 type messageSender interface {
 	SendMessage(context.Context, *telegram.SendMessageParams) (*models.Message, error)

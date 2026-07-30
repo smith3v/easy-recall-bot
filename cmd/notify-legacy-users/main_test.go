@@ -46,6 +46,14 @@ func TestParseUserIDs(t *testing.T) {
 	}
 }
 
+func TestInvitationMessageIncludesFriendlyCopyAndSafetyDetails(t *testing.T) {
+	for _, expected := range []string{"👋", "📚", "✨", "🔒", "/start", "tap Initialize"} {
+		if !strings.Contains(invitationMessage, expected) {
+			t.Fatalf("invitation message does not contain %q: %q", expected, invitationMessage)
+		}
+	}
+}
+
 func TestRunDryRunDoesNotLoadConfigOrCreateSender(t *testing.T) {
 	var stdout bytes.Buffer
 	var stderr bytes.Buffer
