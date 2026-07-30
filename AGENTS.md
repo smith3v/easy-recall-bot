@@ -10,7 +10,7 @@ The Go entrypoint lives in `cmd/tg-word-reminder/main.go`, while reusable logic 
 - `docker build -t tg-word-reminder .` – assemble the container defined in `Dockerfile` for parity with production.
 
 ## Coding Style & Naming Conventions
-Use Go 1.25 features sparingly and keep imports tidy via `go fmt` (or `gofmt` + `goimports` in your editor). Follow idiomatic Go naming: exported types and functions in PascalCase, unexported identifiers in camelCase, configuration structs named after their domain (`DatabaseConfig`, etc.). Prefer small, focused packages and keep Telegram command handlers grouped under `pkg/bot/handlers`.
+Use Go 1.26 features sparingly and keep imports tidy via `go fmt` (or `gofmt` + `goimports` in your editor). Follow idiomatic Go naming: exported types and functions in PascalCase, unexported identifiers in camelCase, configuration structs named after their domain (`DatabaseConfig`, etc.). Prefer small, focused packages and keep Telegram command handlers grouped under `pkg/bot/handlers`.
 
 ## Testing Guidelines
 Table-driven tests in `_test.go` files colocated with the code are preferred. Target deterministic units: database repositories (using a test schema) and Telegram command handlers. Run `go test ./...` before pushing; add `-cover` to monitor coverage for new features. When adding fixtures, place them alongside tests or under a dedicated `testdata/` folder.
