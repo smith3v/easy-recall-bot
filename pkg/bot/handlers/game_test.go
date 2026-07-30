@@ -38,21 +38,144 @@ func TestHandleGameStartRejectsNonPrivateChat(t *testing.T) {
 	}
 }
 
-func TestHandleGameStartWithEmptyVocabulary(t *testing.T) {
+func TestHandleGameStartWithNoEligiblePairs(t *testing.T) {
 	testutil.SetupTestDB(t)
 	logger.SetLogLevel(logger.ERROR)
 	resetGameManager(time.Now)
 
+	userID := int64(808)
+	if err := db.DB.Create(&db.WordPair{
+		UserID:   userID,
+		Word1:    "future",
+		Word2:    "review",
+		SrsState: "review",
+		SrsDueAt: time.Now().UTC().Add(time.Hour),
+	}).Error; err != nil {
+		t.Fatalf("failed to seed future review pair: %v", err)
+	}
+
 	client := newMockClient()
 	b := newTestTelegramBot(t, client)
-	update := newTestUpdate("/game", 808)
+	update := newTestUpdate("/game", userID)
 	update.Message.Chat.Type = models.ChatTypePrivate
 
 	HandleGameStart(context.Background(), b, update)
 
 	got := client.lastMessageText(t)
-	if !strings.Contains(got, "You have no cards saved") {
-		t.Fatalf("expected empty vocabulary message, got %q", got)
+	if !strings.Contains(got, "Nothing to practice right now") {
+		t.Fatalf("expected no eligible pairs message, got %q", got)
+	}
+
+	var sessionCount int64
+	if err := db.DB.Model(&db.GameSession{}).
+		Where("chat_id = ? AND user_id = ?", userID, userID).
+		Count(&sessionCount).Error; err != nil {
+		t.Fatalf("failed to count game sessions: %v", err)
+	}
+	if sessionCount != 0 {
+		t.Fatalf("expected no game session, got %d", sessionCount)
+	}
+}
+
+func TestHandleGameStartUsesReminderPriority(t *testing.T) {
+	testutil.SetupTestDB(t)
+	logger.SetLogLevel(logger.ERROR)
+	resetGameManager(time.Now)
+
+	now := time.Now().UTC()
+	userID := int64(818)
+	pairs := []db.WordPair{
+		{
+			UserID:   userID,
+			Word1:    "old review",
+			Word2:    "pair",
+			SrsState: "review",
+			SrsDueAt: now.Add(-2 * time.Hour),
+		},
+		{
+			UserID:   userID,
+			Word1:    "learning",
+			Word2:    "pair",
+			SrsState: "learning",
+			SrsDueAt: now.Add(-time.Hour),
+		},
+		{
+			UserID:     userID,
+			Word1:      "due new",
+			Word2:      "pair",
+			SrsState:   "new",
+			SrsDueAt:   now.Add(-30 * time.Minute),
+			SrsNewRank: 20,
+		},
+		{
+			UserID:     userID,
+			Word1:      "future new low",
+			Word2:      "pair",
+			SrsState:   "new",
+			SrsDueAt:   now.Add(24 * time.Hour),
+			SrsNewRank: 10,
+		},
+		{
+			UserID:     userID,
+			Word1:      "future new high",
+			Word2:      "pair",
+			SrsState:   "new",
+			SrsDueAt:   now.Add(24 * time.Hour),
+			SrsNewRank: 30,
+		},
+		{
+			UserID:   userID,
+			Word1:    "future review",
+			Word2:    "pair",
+			SrsState: "review",
+			SrsDueAt: now.Add(time.Hour),
+		},
+		{
+			UserID:   userID + 1,
+			Word1:    "other user",
+			Word2:    "pair",
+			SrsState: "review",
+			SrsDueAt: now.Add(-24 * time.Hour),
+		},
+	}
+	if err := db.DB.Create(&pairs).Error; err != nil {
+		t.Fatalf("failed to seed word pairs: %v", err)
+	}
+
+	client := newMockClient()
+	client.response = `{"ok":true,"result":{"message_id":42}}`
+	b := newTestTelegramBot(t, client)
+	update := newTestUpdate("/game", userID)
+	update.Message.Chat.Type = models.ChatTypePrivate
+
+	HandleGameStart(context.Background(), b, update)
+
+	var state db.GameSession
+	if err := db.DB.
+		Where("chat_id = ? AND user_id = ?", userID, userID).
+		First(&state).Error; err != nil {
+		t.Fatalf("failed to load game session: %v", err)
+	}
+	selectedIDs, err := game.SessionPairIDs(&state)
+	if err != nil {
+		t.Fatalf("failed to decode selected pairs: %v", err)
+	}
+	if len(selectedIDs) != game.DeckPairs {
+		t.Fatalf("expected %d selected pairs, got %d", game.DeckPairs, len(selectedIDs))
+	}
+
+	expected := make(map[uint]struct{}, game.DeckPairs)
+	for _, pair := range pairs[:game.DeckPairs] {
+		expected[pair.ID] = struct{}{}
+	}
+	for _, id := range selectedIDs {
+		if _, ok := expected[id]; !ok {
+			t.Fatalf("unexpected selected pair ID %d", id)
+		}
+		delete(expected, id)
+	}
+	if len(expected) != 0 {
+		t.Fatalf("expected selected pair IDs still missing: %v", expected)
 	}
 }
 
