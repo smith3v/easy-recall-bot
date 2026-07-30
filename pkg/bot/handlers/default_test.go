@@ -52,15 +52,15 @@ func TestDefaultHandlerConsumesResetPhraseFlow(t *testing.T) {
 	if err := db.DB.Model(&db.WordPair{}).Where("user_id = ?", 200).Count(&count).Error; err != nil {
 		t.Fatalf("failed to count pairs: %v", err)
 	}
-	if count != 0 {
-		t.Fatalf("expected pairs to be wiped, got %d", count)
+	if count != 1 {
+		t.Fatalf("expected pairs to remain until initialization, got %d", count)
 	}
 
 	var state db.OnboardingState
 	if err := db.DB.Where("user_id = ?", 200).First(&state).Error; err != nil {
 		t.Fatalf("expected onboarding state to exist after restart: %v", err)
 	}
-	if state.Step != "choose_learning" || state.AwaitingResetPhrase {
+	if state.Step != "choose_learning" || state.AwaitingResetPhrase || !state.ResetPending {
 		t.Fatalf("expected onboarding wizard step after reset, got %+v", state)
 	}
 

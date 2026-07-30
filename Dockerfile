@@ -15,8 +15,9 @@ RUN go mod download
 # Copy the rest of the application code
 COPY . .
 
-# Build the tg-word-reminder binary
+# Build the runtime and one-shot administration binaries
 RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o tg-word-reminder ./cmd/tg-word-reminder
+RUN CGO_ENABLED=0 GOOS=linux GOARCH=amd64 go build -o notify-legacy-users ./cmd/notify-legacy-users
 
 # Second stage: Create a minimal image to run the binary
 FROM alpine:latest
@@ -26,8 +27,9 @@ LABEL org.opencontainers.image.source=https://github.com/smith3v/tg-word-reminde
 # Set the working directory
 WORKDIR /app
 
-# Copy the binary from the builder stage
+# Copy the binaries from the builder stage
 COPY --from=builder /app/tg-word-reminder .
+COPY --from=builder /app/notify-legacy-users .
 COPY --from=builder /app/vocabularies /app/vocabularies
 
 # Command to run the bot

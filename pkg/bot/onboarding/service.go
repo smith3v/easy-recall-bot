@@ -10,6 +10,7 @@ import (
 
 	"github.com/smith3v/tg-word-reminder/pkg/db"
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 const (
@@ -22,6 +23,7 @@ const (
 
 var (
 	errInvalidLanguagePair = errors.New("invalid language pair")
+	errInvalidState        = errors.New("invalid onboarding state")
 	ErrNoEligiblePairs     = errors.New("no eligible pairs found")
 
 	srsNewRankRand = rand.New(rand.NewSource(time.Now().UnixNano()))
@@ -40,6 +42,14 @@ func GetState(userID int64) (*db.OnboardingState, error) {
 }
 
 func Begin(userID int64) (*db.OnboardingState, error) {
+	return begin(userID, false)
+}
+
+func BeginReset(userID int64) (*db.OnboardingState, error) {
+	return begin(userID, true)
+}
+
+func begin(userID int64, resetPending bool) (*db.OnboardingState, error) {
 	state, err := ensureState(userID)
 	if err != nil {
 		return nil, err
@@ -48,6 +58,7 @@ func Begin(userID int64) (*db.OnboardingState, error) {
 	state.LearningLang = ""
 	state.KnownLang = ""
 	state.AwaitingResetPhrase = false
+	state.ResetPending = resetPending
 	if err := db.DB.Save(state).Error; err != nil {
 		return nil, err
 	}
@@ -63,6 +74,7 @@ func SetAwaitingResetPhrase(userID int64) error {
 	state.LearningLang = ""
 	state.KnownLang = ""
 	state.AwaitingResetPhrase = true
+	state.ResetPending = false
 	return db.DB.Save(state).Error
 }
 
@@ -113,6 +125,21 @@ func BackToKnown(userID int64) (*db.OnboardingState, error) {
 		return nil, errInvalidLanguagePair
 	}
 	state.Step = StepChooseKnown
+	state.KnownLang = ""
+	state.AwaitingResetPhrase = false
+	if err := db.DB.Save(state).Error; err != nil {
+		return nil, err
+	}
+	return state, nil
+}
+
+func BackToLearning(userID int64) (*db.OnboardingState, error) {
+	state, err := ensureState(userID)
+	if err != nil {
+		return nil, err
+	}
+	state.Step = StepChooseLearning
+	state.LearningLang = ""
 	state.KnownLang = ""
 	state.AwaitingResetPhrase = false
 	if err := db.DB.Save(state).Error; err != nil {
@@ -185,27 +212,6 @@ func CountEligiblePairs(learningCode, knownCode string) (int, error) {
 	return int(count), nil
 }
 
-func ResetUserDataTx(userID int64) error {
-	return db.DB.Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("user_id = ?", userID).Delete(&db.WordPair{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", userID).Delete(&db.UserSettings{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", userID).Delete(&db.TrainingSession{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", userID).Delete(&db.GameSession{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("user_id = ?", userID).Delete(&db.OnboardingState{}).Error; err != nil {
-			return err
-		}
-		return nil
-	})
-}
-
 func ProvisionUserVocabularyAndDefaults(userID int64, learningCode, knownCode string) (int, error) {
 	if err := validateLanguagePair(learningCode, knownCode); err != nil {
 		return 0, err
@@ -213,6 +219,11 @@ func ProvisionUserVocabularyAndDefaults(userID int64, learningCode, knownCode st
 
 	inserted := 0
 	err := db.DB.Transaction(func(tx *gorm.DB) error {
+		state, err := stateForProvisionTx(tx, userID, learningCode, knownCode)
+		if err != nil {
+			return err
+		}
+
 		count, err := countEligiblePairsTx(tx, learningCode, knownCode)
 		if err != nil {
 			return err
@@ -224,6 +235,12 @@ func ProvisionUserVocabularyAndDefaults(userID int64, learningCode, knownCode st
 		var initRows []db.InitVocabulary
 		if err := tx.Find(&initRows).Error; err != nil {
 			return err
+		}
+
+		if state.ResetPending {
+			if err := deleteReplaceableUserDataTx(tx, userID); err != nil {
+				return err
+			}
 		}
 
 		now := time.Now().UTC()
@@ -288,6 +305,40 @@ func ProvisionUserVocabularyAndDefaults(userID int64, learningCode, knownCode st
 		return 0, err
 	}
 	return inserted, nil
+}
+
+func stateForProvisionTx(tx *gorm.DB, userID int64, learningCode, knownCode string) (*db.OnboardingState, error) {
+	var state db.OnboardingState
+	if err := tx.Clauses(clause.Locking{Strength: "UPDATE"}).
+		Where("user_id = ?", userID).
+		First(&state).Error; err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, errInvalidState
+		}
+		return nil, err
+	}
+	if state.Step != StepConfirmImport ||
+		state.LearningLang != learningCode ||
+		state.KnownLang != knownCode ||
+		state.AwaitingResetPhrase {
+		return nil, errInvalidState
+	}
+	return &state, nil
+}
+
+func deleteReplaceableUserDataTx(tx *gorm.DB, userID int64) error {
+	models := []any{
+		&db.WordPair{},
+		&db.UserSettings{},
+		&db.TrainingSession{},
+		&db.GameSession{},
+	}
+	for _, model := range models {
+		if err := tx.Where("user_id = ?", userID).Delete(model).Error; err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func countEligiblePairsTx(tx *gorm.DB, learningCode, knownCode string) (int, error) {

@@ -276,6 +276,27 @@ func (m *GameManager) GetSession(chatID, userID int64) *GameSession {
 	return m.sessions[key]
 }
 
+// EndAllForUser drops all in-memory sessions for a user and closes their statistics.
+func (m *GameManager) EndAllForUser(userID int64, reason string) {
+	if userID == 0 {
+		return
+	}
+
+	endedAt := m.now()
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	for key, session := range m.sessions {
+		if session == nil {
+			delete(m.sessions, key)
+			continue
+		}
+		if session.userID == userID {
+			persistSessionEnd(session, endedAt, reason)
+			delete(m.sessions, key)
+		}
+	}
+}
+
 type AttemptResult struct {
 	Handled         bool
 	Correct         bool

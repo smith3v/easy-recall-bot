@@ -12,7 +12,8 @@ func RenderLearningLanguagePrompt() (string, *models.InlineKeyboardMarkup) {
 }
 
 func RenderResetWarningPrompt() (string, *models.InlineKeyboardMarkup) {
-	text := "Re-initialization will wipe your vocabulary and training progress data (review sessions and game sessions).\n" +
+	text := "Re-initialization will replace your vocabulary and training progress data (review sessions and game sessions).\n" +
+		"Your current data will remain unchanged until you finish setup and tap Initialize.\n" +
 		"To continue, type this exact phrase:\n" +
 		ResetPhrase
 	return text, &models.InlineKeyboardMarkup{

@@ -94,6 +94,36 @@ Send a CSV document to the bot chat.
 
 Reference config: `config.example.json`.
 
+## Legacy User Refresh
+
+After deploying the atomic re-initialization flow, preview a one-time invitation
+to an explicit user allowlist:
+
+```bash
+go run ./cmd/notify-legacy-users -user-ids "123,456"
+```
+
+Review the dry-run output, then add `-send` to deliver. The command reads the
+Telegram token from `config.json` by default; use `-config` to select another
+configuration file. Delivery does not change user data. Users choose whether to
+replace their vocabulary by completing `/start`.
+
+The Docker image includes the utility alongside the bot. In the production
+Compose deployment, run it as a one-shot container so it reuses the selected
+bot service's read-only configuration:
+
+```bash
+sudo /usr/local/bin/docker compose \
+  -p to-word-reminder \
+  -f compose.yaml \
+  run --rm --no-deps recall-bot \
+  /app/notify-legacy-users \
+  -user-ids "123,456"
+```
+
+Use `reminder-bot` instead of `recall-bot` when targeting the reminder
+installation. Add `-send` only after reviewing the dry-run recipient list.
+
 ## Development
 
 - Run tests: `go test ./...`
@@ -104,6 +134,7 @@ Reference config: `config.example.json`.
 ## Project Layout
 
 - `cmd/tg-word-reminder` - application entrypoint
+- `cmd/notify-legacy-users` - dry-run-first legacy-user invitation tool
 - `pkg/bot/handlers` - Telegram handlers
 - `pkg/bot/onboarding` - onboarding state machine and provisioning
 - `pkg/bot/training` - spaced-repetition training flow
