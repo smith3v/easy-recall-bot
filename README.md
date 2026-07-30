@@ -11,7 +11,7 @@ Easy Recall Bot is a Telegram bot for vocabulary practice with onboarding, space
 
 - Onboarding wizard on `/start` to initialize a personal deck from built-in multilingual vocabulary.
 - Safe re-initialization for existing users with explicit `RESET MY DATA` confirmation.
-- Spaced-repetition review flow (`/review`) plus quiz mode (`/game`).
+- Spaced-repetition review flow (`/review`) plus quiz mode (`/game`) using the same reminder-prioritized cards.
 - CSV import/export for personal vocabulary updates.
 - Configurable reminder schedule and cards per session.
 
@@ -32,7 +32,7 @@ If built-in onboarding vocabulary is unavailable, users can still upload their o
 
 - `/start` - start onboarding or re-initialize account
 - `/review` - start/resume spaced-repetition training
-- `/game` - start quiz mode
+- `/game` - practice up to five reminder-prioritized pairs in quiz mode
 - `/getpair` - get one random card
 - `/settings` - configure reminders and training preferences
 - `/export` - download your vocabulary as CSV
@@ -120,6 +120,7 @@ Reference config: `config.example.json`.
 - `docs/2026-02-12-onboarding-wizard-implementation.md`
 - `docs/2026-01-15-spaced-repetition.md`
 - `docs/2025-12-24-game.md`
+- `docs/2026-07-30-game-srs-selection-implementation.md`
 - `docs/2025-12-28-import-export.md`
 
 ## License

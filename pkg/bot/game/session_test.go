@@ -238,49 +238,6 @@ func TestFinishStatsFormatsStats(t *testing.T) {
 	}
 }
 
-func TestSelectRandomPairsReturnsDistinctPairs(t *testing.T) {
-	testutil.SetupTestDB(t)
-
-	userID := int64(800)
-	otherID := int64(801)
-	var pairs []db.WordPair
-	for i := range 8 {
-		pairs = append(pairs, db.WordPair{
-			UserID: userID,
-			Word1:  fmt.Sprintf("word-%d", i),
-			Word2:  fmt.Sprintf("term-%d", i),
-		})
-	}
-	for i := range 3 {
-		pairs = append(pairs, db.WordPair{
-			UserID: otherID,
-			Word1:  fmt.Sprintf("other-%d", i),
-			Word2:  fmt.Sprintf("else-%d", i),
-		})
-	}
-	if err := db.DB.Create(&pairs).Error; err != nil {
-		t.Fatalf("failed to seed pairs: %v", err)
-	}
-
-	selected, err := SelectRandomPairs(userID, DeckPairs)
-	if err != nil {
-		t.Fatalf("failed to select pairs: %v", err)
-	}
-	if len(selected) != DeckPairs {
-		t.Fatalf("expected %d pairs, got %d", DeckPairs, len(selected))
-	}
-	seen := make(map[uint]struct{})
-	for _, pair := range selected {
-		if pair.UserID != userID {
-			t.Fatalf("expected user_id %d, got %d", userID, pair.UserID)
-		}
-		if _, exists := seen[pair.ID]; exists {
-			t.Fatalf("expected distinct pairs, got duplicate ID %d", pair.ID)
-		}
-		seen[pair.ID] = struct{}{}
-	}
-}
-
 func TestBuildDeckCreatesTwoCardsPerPair(t *testing.T) {
 	pairs := []db.WordPair{
 		{ID: 1, Word1: "uno", Word2: "one"},

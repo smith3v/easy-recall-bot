@@ -170,19 +170,6 @@ func (m *GameManager) SweepInactive(ctx context.Context, sender MessageSender) {
 	}
 }
 
-// SelectRandomPairs loads up to limit random pairs for the user, matching /getpair's source.
-func SelectRandomPairs(userID int64, limit int) ([]db.WordPair, error) {
-	var pairs []db.WordPair
-	query := db.DB.Where("user_id = ?", userID).Order("RANDOM()")
-	if limit > 0 {
-		query = query.Limit(limit)
-	}
-	if err := query.Find(&pairs).Error; err != nil {
-		return nil, err
-	}
-	return pairs, nil
-}
-
 // buildDeck expands pairs into two-direction cards without shuffling.
 func buildDeck(pairs []db.WordPair) []Card {
 	deck := make([]Card, 0, len(pairs)*2)

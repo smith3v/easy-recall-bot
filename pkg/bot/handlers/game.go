@@ -9,6 +9,7 @@ import (
 	"github.com/go-telegram/bot"
 	"github.com/go-telegram/bot/models"
 	"github.com/smith3v/tg-word-reminder/pkg/bot/game"
+	"github.com/smith3v/tg-word-reminder/pkg/bot/training"
 	"github.com/smith3v/tg-word-reminder/pkg/db"
 	"github.com/smith3v/tg-word-reminder/pkg/logger"
 )
@@ -36,7 +37,7 @@ func HandleGameStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 		return
 	}
 
-	pairs, err := game.SelectRandomPairs(update.Message.From.ID, game.DeckPairs)
+	pairs, err := training.SelectSessionPairs(update.Message.From.ID, game.DeckPairs, now)
 	if err != nil {
 		logger.Error("failed to fetch word pairs for game", "user_id", update.Message.From.ID, "error", err)
 		b.SendMessage(ctx, &bot.SendMessageParams{
@@ -48,7 +49,7 @@ func HandleGameStart(ctx context.Context, b *bot.Bot, update *models.Update) {
 	if len(pairs) == 0 {
 		b.SendMessage(ctx, &bot.SendMessageParams{
 			ChatID: update.Message.Chat.ID,
-			Text:   "You have no cards saved. Please upload some cards first.",
+			Text:   "Nothing to practice right now.",
 		})
 		return
 	}
