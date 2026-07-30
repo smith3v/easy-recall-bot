@@ -1,7 +1,7 @@
 # Dockerfile
 
 # First stage: Build the tg-word-reminder binary
-FROM golang:1.26.2 AS builder
+FROM golang:1.26.5 AS builder
 
 # Set the working directory
 WORKDIR /app
