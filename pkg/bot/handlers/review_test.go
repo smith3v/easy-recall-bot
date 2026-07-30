@@ -353,7 +353,7 @@ func TestHandleOverdueCallbackSnoozeEndsSession(t *testing.T) {
 	if settings.ReminderSnoozedUntil == nil {
 		t.Fatalf("expected reminder snooze to be set")
 	}
-	if settings.ReminderSnoozedUntil.Before(before.Add(24 * time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(24*time.Hour)) {
+	if settings.ReminderSnoozedUntil.Before(before.Add(24*time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(24*time.Hour)) {
 		t.Fatalf("expected snooze to be about 24h ahead, got %v", settings.ReminderSnoozedUntil)
 	}
 
@@ -417,7 +417,7 @@ func TestHandleOverdueCallbackSnoozeWeekSetsReminderWindow(t *testing.T) {
 	if settings.ReminderSnoozedUntil == nil {
 		t.Fatalf("expected reminder snooze to be set")
 	}
-	if settings.ReminderSnoozedUntil.Before(before.Add(7 * 24 * time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(7*24*time.Hour)) {
+	if settings.ReminderSnoozedUntil.Before(before.Add(7*24*time.Hour)) || settings.ReminderSnoozedUntil.After(after.Add(7*24*time.Hour)) {
 		t.Fatalf("expected snooze to be about 7d ahead, got %v", settings.ReminderSnoozedUntil)
 	}
 
