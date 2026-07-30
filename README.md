@@ -108,6 +108,22 @@ Telegram token from `config.json` by default; use `-config` to select another
 configuration file. Delivery does not change user data. Users choose whether to
 replace their vocabulary by completing `/start`.
 
+The Docker image includes the utility alongside the bot. In the production
+Compose deployment, run it as a one-shot container so it reuses the selected
+bot service's read-only configuration:
+
+```bash
+sudo /usr/local/bin/docker compose \
+  -p to-word-reminder \
+  -f compose.yaml \
+  run --rm --no-deps recall-bot \
+  /app/notify-legacy-users \
+  -user-ids "123,456"
+```
+
+Use `reminder-bot` instead of `recall-bot` when targeting the reminder
+installation. Add `-send` only after reviewing the dry-run recipient list.
+
 ## Development
 
 - Run tests: `go test ./...`
