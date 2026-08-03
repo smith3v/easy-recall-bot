@@ -12,6 +12,7 @@ import (
 	"github.com/smith3v/tg-word-reminder/pkg/bot/handlers"
 	"github.com/smith3v/tg-word-reminder/pkg/bot/onboarding"
 	"github.com/smith3v/tg-word-reminder/pkg/bot/reminders"
+	"github.com/smith3v/tg-word-reminder/pkg/bot/stats"
 	"github.com/smith3v/tg-word-reminder/pkg/bot/training"
 	"github.com/smith3v/tg-word-reminder/pkg/config"
 	"github.com/smith3v/tg-word-reminder/pkg/db"
@@ -71,6 +72,8 @@ func main() {
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/export", bot.MatchTypeExact, handlers.HandleExport)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/review", bot.MatchTypeExact, handlers.HandleReview)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/game", bot.MatchTypeExact, handlers.HandleGameStart)
+	statHandler := handlers.NewStatHandler(stats.NewPostgresStarter(db.DB))
+	b.RegisterHandler(bot.HandlerTypeMessageText, "/stat", bot.MatchTypeExact, statHandler.Handle)
 	b.RegisterHandler(bot.HandlerTypeMessageText, "/feedback", bot.MatchTypeExact, handlers.HandleFeedback)
 	b.RegisterHandler(bot.HandlerTypeCallbackQueryData, "s:", bot.MatchTypePrefix, handlers.HandleSettingsCallback)
 	b.RegisterHandler(bot.HandlerTypeCallbackQueryData, "g:r:", bot.MatchTypePrefix, handlers.HandleGameCallback)
