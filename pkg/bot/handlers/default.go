@@ -42,6 +42,7 @@ func DefaultHandler(ctx context.Context, b *bot.Bot, update *models.Update) {
 				"\\* /start: \\(re\\-\\)initialize your account\\.\n\n" +
 				"\\* /review: start a review session\\.\n" +
 				"\\* /game: start a quiz session\\.\n" +
+				"\\* /stat: show your personal learning statistics\\.\n" +
 				"\\* /getpair: get a random card\\.\n\n" +
 				"\\* /settings: configure bot settings\\.\n" +
 				"\\* /feedback: send feedback to the bot admins\\.\n\n" +

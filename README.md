@@ -33,6 +33,7 @@ If built-in onboarding vocabulary is unavailable, users can still upload their o
 - `/start` - start onboarding or re-initialize account
 - `/review` - start/resume spaced-repetition training
 - `/game` - practice up to five reminder-prioritized pairs in quiz mode
+- `/stat` - show your personal learning statistics (private chat)
 - `/getpair` - get one random card
 - `/settings` - configure reminders and training preferences
 - `/export` - download your vocabulary as CSV

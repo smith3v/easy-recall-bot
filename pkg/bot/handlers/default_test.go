@@ -26,6 +26,9 @@ func TestDefaultHandlerSendsHelpForText(t *testing.T) {
 	if !strings.Contains(got, "Commands:") {
 		t.Fatalf("expected commands message, got %q", got)
 	}
+	if !strings.Contains(got, "/stat") {
+		t.Fatalf("expected /stat in commands message, got %q", got)
+	}
 }
 
 func TestDefaultHandlerConsumesResetPhraseFlow(t *testing.T) {
